@@ -14,6 +14,7 @@ use oura_link::OuraClient;
 
 #[cfg(feature = "torch")]
 mod activity_model;
+mod control;
 mod game;
 mod motion_server;
 mod viz;
@@ -89,6 +90,22 @@ enum Command {
     Accel {
         #[arg(long, default_value_t = 15)]
         seconds: u64,
+    },
+    /// Control the laptop with ring gestures: tilt = arrow keys, double-shake =
+    /// spacebar, triple-shake = lock screen (macOS, via System Events).
+    Control {
+        /// How long to stay in control mode.
+        #[arg(long, default_value_t = 300)]
+        seconds: u64,
+        /// Degrees of tilt (from the calibrated neutral) that fires an arrow key.
+        #[arg(long, default_value_t = 25.0)]
+        tilt_degrees: f64,
+        /// Shake spike threshold in g.
+        #[arg(long, default_value_t = 0.6)]
+        shake_g: f64,
+        /// Print detected gestures without sending any key events.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Real-time 3D motion visualizer (web UI with start/stop + sensitivity).
     Viz {
@@ -274,6 +291,16 @@ async fn main() -> Result<()> {
         Command::LiveHr { seconds, raw } => cmd_live_hr(&cli, &key, *seconds, *raw).await,
         Command::Accel { seconds } => cmd_accel(&cli, &key, *seconds).await,
         Command::SleepAnalyze { force } => cmd_sleep_analyze(&cli, &key, *force).await,
+        Command::Control {
+            seconds,
+            tilt_degrees,
+            shake_g,
+            dry_run,
+        } => {
+            let client = connect(&cli).await?;
+            maybe_auth(&client, &key).await?;
+            control::run(client, *seconds, *tilt_degrees, *shake_g, *dry_run).await
+        }
         Command::Viz { port, minutes } => {
             let client = connect(&cli).await?;
             maybe_auth(&client, &key).await?;
